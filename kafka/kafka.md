@@ -379,43 +379,72 @@ Let's bring our visual dashboard back, this time deployed natively inside K3s al
 apiVersion: v1
 kind: Service
 metadata:
-  name: kafka-ui-service
+  name: kafka-service
 spec:
   selector:
-    app: kafka-ui
+    app: kafka
   ports:
-    - protocol: TCP
-      port: 8080
-      targetPort: 8080
+    - name: external
+      protocol: TCP
+      port: 9092
+      targetPort: 9092
+    - name: internal
+      protocol: TCP
+      port: 29092
+      targetPort: 29092
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kafka-ui
+  name: kafka-broker
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: kafka-ui
+      app: kafka
   template:
     metadata:
       labels:
-        app: kafka-ui
+        app: kafka
     spec:
       containers:
-      - name: kafka-ui
-        image: provectuslabs/kafka-ui:latest
+      - name: kafka
+        image: apache/kafka:4.3.0
         ports:
-        - containerPort: 8080
+        - containerPort: 9092
+        - containerPort: 29092
         env:
-        - name: KAFKA_CLUSTERS_0_NAME
-          value: "K3s-Tutorial-Cluster"
-        - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
-          value: "kafka-service:9092"
-
+        - name: KAFKA_NODE_ID
+          value: "1"
+        - name: KAFKA_PROCESS_ROLES
+          value: "broker,controller"
+        # We now define three distinct listeners
+        - name: KAFKA_LISTENERS
+          value: "EXTERNAL://0.0.0.0:9092,INTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093"
+        # External tells clients to use localhost. Internal tells pods to use the Service name!
+        - name: KAFKA_ADVERTISED_LISTENERS
+          value: "EXTERNAL://localhost:9092,INTERNAL://kafka-service:29092"
+        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+          value: "INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT"
+        - name: KAFKA_INTER_BROKER_LISTENER_NAME
+          value: "INTERNAL"
+        - name: KAFKA_CONTROLLER_LISTENER_NAMES
+          value: "CONTROLLER"
+        - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+          value: "1@localhost:9093"
 ```
 
 Apply the manifest and port-forward the UI service to port 8080.
+
+You are right at the finish line for getting your visual dashboard up and running in K3s! Once you have created and saved the `kafka-ui-deployment.yaml` file, here is exactly how you proceed based on your masterclass outline:
+
+### **Next Steps to Launch the UI**
+
+1. **Apply and Port-Forward:** First, you need to deploy the UI and open a tunnel to it. You will apply the manifest and port-forward the UI service to port 8080. *(Using the K3s commands from earlier in your script, you would run `sudo k3s kubectl apply -f kafka-ui-deployment.yaml` and then `sudo k3s kubectl port-forward svc/kafka-ui-service 8080:8080`)*.
+
+2. **Verify the Deployment:** Once the tunnel is open, go ahead and open `http://localhost:8080` in your web browser.
+
+3. **Explore:** You will see your K3s-hosted Kafka cluster ready to go!.
 
 > 
 > **Instructor Note for Python Pipeline:** Because we set up the `kubectl port-forward` for port 9092 in Part 4, your viewers do not need to change a single line of code in the `producer.py` or `consumer.py` scripts from the previous chapter. The Python `confluent_kafka` library will continue connecting to `localhost:9092`, oblivious to the fact that the backend infrastructure has been completely upgraded to a Kubernetes cluster!.
