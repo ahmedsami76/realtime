@@ -325,6 +325,7 @@ kind: Deployment
 metadata:
   name: kafka-broker
 spec:
+  type: LoadBalancer
   replicas: 1
   selector:
     matchLabels:
@@ -390,6 +391,7 @@ kind: Service
 metadata:
   name: kafka-ui-service
 spec:
+  type: LoadBalancer
   selector:
     app: kafka-ui
   ports:
