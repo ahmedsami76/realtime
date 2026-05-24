@@ -311,79 +311,6 @@ spec:
   selector:
     app: kafka
   ports:
-    - protocol: TCP
-      port: 9092
-      targetPort: 9092
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: kafka-broker
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: kafka
-  template:
-    metadata:
-      labels:
-        app: kafka
-    spec:
-      containers:
-      - name: kafka
-        image: apache/kafka:4.3.0
-        ports:
-        - containerPort: 9092
-        env:
-        - name: KAFKA_NODE_ID
-          value: "1"
-        - name: KAFKA_PROCESS_ROLES
-          value: "broker,controller"
-        - name: KAFKA_LISTENERS
-          value: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
-        - name: KAFKA_ADVERTISED_LISTENERS
-          value: "PLAINTEXT://localhost:9092"
-        - name: KAFKA_CONTROLLER_LISTENER_NAMES
-          value: "CONTROLLER"
-        - name: KAFKA_CONTROLLER_QUORUM_VOTERS
-          value: "1@localhost:9093"
-
-```
-
-Apply the manifest:
-
-```bash
-sudo k3s kubectl apply -f kafka-deployment.yaml
-
-```
-
-**Step 3: Port-Forwarding and Topic Creation**
-Because Kubernetes isolates its network, we need to open a secure tunnel from our local host machine to the Kafka Service so our Python scripts can reach it. Run this and leave it open:
-
-```bash
-sudo k3s kubectl port-forward svc/kafka-service 9092:9092
-
-```
-
-Just like we used `docker exec` before, we now use `kubectl exec` to run the Kafka binary scripts tucked away in the `/opt/kafka/bin/` absolute path.
-
-```bash
-sudo k3s kubectl exec -it <your-pod-name> -- /opt/kafka/bin/kafka-topics.sh --create --topic wikimedia-edits --bootstrap-server localhost:9092
-
-```
-
-**Step 4: Visualizing the K3s Cluster**
-Let's bring our visual dashboard back, this time deployed natively inside K3s alongside our broker. Create `kafka-ui-deployment.yaml`:
-
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: kafka-service
-spec:
-  selector:
-    app: kafka
-  ports:
     - name: external
       protocol: TCP
       port: 9092
@@ -418,10 +345,8 @@ spec:
           value: "1"
         - name: KAFKA_PROCESS_ROLES
           value: "broker,controller"
-        # We now define three distinct listeners
         - name: KAFKA_LISTENERS
           value: "EXTERNAL://0.0.0.0:9092,INTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093"
-        # External tells clients to use localhost. Internal tells pods to use the Service name!
         - name: KAFKA_ADVERTISED_LISTENERS
           value: "EXTERNAL://localhost:9092,INTERNAL://kafka-service:29092"
         - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
@@ -432,6 +357,70 @@ spec:
           value: "CONTROLLER"
         - name: KAFKA_CONTROLLER_QUORUM_VOTERS
           value: "1@localhost:9093"
+```
+
+Apply the manifest:
+
+```bash
+sudo k3s kubectl apply -f kafka-deployment.yaml
+
+```
+
+**Step 3: Port-Forwarding and Topic Creation**
+Because Kubernetes isolates its network, we need to open a secure tunnel from our local host machine to the Kafka Service so our Python scripts can reach it. Run this and leave it open:
+
+```bash
+sudo k3s kubectl port-forward svc/kafka-service 9092:9092
+
+```
+
+Just like we used `docker exec` before, we now use `kubectl exec` to run the Kafka binary scripts tucked away in the `/opt/kafka/bin/` absolute path.
+
+```bash
+sudo k3s kubectl exec -it <your-pod-name> -- /opt/kafka/bin/kafka-topics.sh --create --topic wikimedia-edits --bootstrap-server localhost:9092
+
+```
+
+**Step 4: Visualizing the K3s Cluster**
+Let's bring our visual dashboard back, this time deployed natively inside K3s alongside our broker. Create `kafka-ui-deployment.yaml`:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-ui-service
+spec:
+  selector:
+    app: kafka-ui
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-ui
+  template:
+    metadata:
+      labels:
+        app: kafka-ui
+    spec:
+      containers:
+      - name: kafka-ui
+        image: provectuslabs/kafka-ui:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: KAFKA_CLUSTERS_0_NAME
+          value: "K3s-Tutorial-Cluster"
+        - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
+          value: "kafka-service:29092"
 ```
 
 Apply the manifest and port-forward the UI service to port 8080.
